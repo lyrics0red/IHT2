@@ -91,6 +91,182 @@
 ## 7) Тексты программы на языке ассемблера, расширенные комментариями
 <p>В папке <b>IHT2/IHT2/Assembler</b> расположены файлы программы на языке ассемблера. В папке <b>beforeRefactor</b> лежат файлы ассемблера до рефакторинга программы за счет оптимизации регистров процессора. В папке <b>afterRefactor</b> лежат файлы ассемблера после рефакторинга программы за счет оптимизации регистров процессора. Комментарии прописаны только для окончательных файлов ассемблера, то есть лежащих в папке <b>afterRefactor</b>.</p>
 
+<b>main.s</b>:
+
+		# -52[rbp] := r12d
+		# -4[rbp] := r13d
+
+			.intel_syntax noprefix
+			.text
+			.comm	data,20000,32					# Строка, которую мы вводим (массив символов)
+			.section	.rodata				# rodata
+			.align 8
+	
+		.LC0:
+			.string	"Incorect number of parameters."	# .LC0: "Incorrect number of parameters." (Сообщение об ошибке)
+	
+		.LC1:
+			.string	"r"					# .LC1: "r" (Файл на чтение)
+	
+		.LC2:
+			.string	"Incorrect name of input file."	# .LC2: "Incorrect name of input file." (Сообщение об ошибке)
+	
+		.LC3:
+			.string	"w"					# .LC3: "w" (Файл на запись)
+	
+		.LC4:
+			.string	"%c"					# .LC4: "%c" (Символьный формат)
+
+	
+			.text							# Секция с кодом
+			.globl	main						# Функция main
+	
+		main:
+			push	rbp						# Сохраняем rbp на стек
+			mov	rbp, rsp					# rbp := rsp
+			sub	rsp, 64					# rsp -= 64 (выделение памяти на стеке)
+			mov	r12d, edi					# edi - 1-й аргумент - argc
+			mov	QWORD PTR -64[rbp], rsi			# rsi - 2-й аргумент - argv
+			cmp	r12d, 3					# Сравниваем argc с 3
+			jne	.L2						# Если argc != 3, то переходим в .L2
+			mov	rax, QWORD PTR -64[rbp]			# rax := argv
+			mov	rax, QWORD PTR 8[rax]				# rax := argv[1]
+			mov	QWORD PTR -16[rbp], rax			# instr := argv[1]
+			mov	rax, QWORD PTR -64[rbp]			# rax := argv
+			mov	rax, QWORD PTR 16[rax]				# rax := argv[2]
+			mov	QWORD PTR -24[rbp], rax			# outstr := argv[2]
+			mov	rdi, QWORD PTR -16[rbp]			# rdi := instr - 1-й аргумент
+			lea	rsi, .LC1[rip]					# rsi := &(строчка "r") - 2-й аргумент
+			call	fopen@PLT					# fopen(instr, "r");
+			test	rax, rax					# Проверка rax на значение NULL
+			jne	.L5						# Если rax != NULL, то переходим в .L5 
+			jmp	.L8						# Переходим в .L8
+	
+		.L2:
+			lea	rdi, .LC0[rip]					# rdi := &(строчка "Incorrect number of parameters.") - 1-й аргумент
+			call	printf@PLT					# printf("Incorrect number of parameters.");
+			mov	eax, 1						# eax := 1
+			jmp	.L4						# Переходим в .L4
+	
+		.L8:
+			lea	rdi, .LC2[rip]					# rdi := &(строчка "Incorrect name of input file.") - 1-й аргумент
+			call	printf@PLT					# printf("Incorrect name of input file.");
+			mov	eax, 1						# eax := 1
+			jmp	.L4 						# Переходим в .L4
+	
+		.L5:
+			mov	rdi, QWORD PTR -16[rbp]			# rdi := instr - 1-й аргумент
+			lea	rsi, .LC1[rip]					# rsi := &(строчка "r") - 2-й аргумент
+			call	fopen@PLT					# fopen(instr, "r");
+			mov	QWORD PTR -32[rbp], rax			# rbp[-32](input) := результат работы fopen(instr, "r")
+			mov	rdi, QWORD PTR -24[rbp]			# rdi := outstr - 1-й аргумент 
+			lea	rsi, .LC3[rip]					# rsi := &(строчка "w") - 2-й аргумент
+			call	fopen@PLT					# fopen(outstr, "w");
+			mov	QWORD PTR -40[rbp], rax			# rbp[-40](output) := результат работы fopen(outstr, "w")
+			mov	r13d, 0					# int i = 0;
+			jmp	.L6						# Переходим в .L6
+	
+		.L7:
+			mov	eax, r13d					# eax := i
+			cdqe
+			lea	rdx, data[rip]					# rdx := &data - 3-й аргумент
+			add	rdx, rax					# rdx := rdx + rax
+			mov	rdi, QWORD PTR -32[rbp]			# rdi := input - 1-й аргумент
+			lea	rsi, .LC4[rip]					# rsi := &(строчка "%c") - 2-й аргумент
+			mov	eax, 0						# eax := 0
+			call	__isoc99_fscanf@PLT				# fscanf(input, "%c", &data[i]);
+			add	r13d, 1					# ++i;
+	
+		.L6:
+			mov	rdi, QWORD PTR -32[rbp]			# rdi := input
+			call	feof@PLT					# feof(input)
+			test	eax, eax					# Проверка eax на значение 0
+			je	.L7						# Если eax == 0, то переходим в .L7 
+			call	modify@PLT					# modify();
+			mov	rsi, QWORD PTR -40[rbp]			# rsi := input - 2-й аргумент
+			lea	rdi, data[rip]					# rdi := rbp[-144](data) - 1-й аргумент
+			call	fputs@PLT					# fprintf(output, "%s", data); (под капотом вызвалось fputs(data, output);)
+			mov	rdi, QWORD PTR -32[rbp]			# rdi := input - 1-й аргумент
+			call	fclose@PLT					# fclose(input);
+			mov	rdi, QWORD PTR -40[rbp]			# rdi := output - 1-й аргумент
+			call	fclose@PLT					# fclose(output);
+			mov	eax, 0						# eax := 0
+	
+		.L4:
+			leave							# / Выход из функции
+			ret							# \
+			
+<b>modify.s</b>:
+
+		# -20[rbp] = r14d
+		# -24[rbp] = r15d
+			.intel_syntax noprefix
+			.text
+			.globl	mask
+			.data
+		mask:
+			.ascii	"aeiouy"				# char mask[6] = "aeiouy"
+	
+			.text						# Секция с кодом
+			.globl	modify					# Функция modify
+	
+		modify:
+			push	rbp					# Сохраняем rbp на стек
+			mov	rbp, rsp				# rbp := rsp
+			push	rbx					# Сохраняем rbx на стек
+			sub	rsp, 24				# rsp -= 24 (выделение памяти на стеке)
+			mov	r14d, 0				# i = 0;
+			jmp	.L2					# Переходим в .L2
+	
+		.L7:
+			mov	r15b, 0				# j = 0
+			jmp	.L3					# Переходим в .L3
+	
+		.L6:
+			mov	eax, r14d				# eax := i
+			cdqe
+			lea	rdx, data[rip]				# rdx := &data
+			movzx	edx, BYTE PTR [rax+rdx]		# edx := data[i]
+			mov	eax, r15d				# eax := j
+			cdqe
+			lea	rcx, mask[rip]				# rcx := &mask
+			movzx	eax, BYTE PTR [rax+rcx]		# eax := mask[j]
+			cmp	dl, al					# Сравниваем data[i] и mask[j]
+			jne	.L4					# Если data[i] != mask[j], то переходим в .L4
+			mov	eax, r14d				# eax := i
+			cdqe
+			lea	rdx, data[rip]				# rdx := &data
+			movzx	eax, BYTE PTR [rax+rdx]		# eax := data[i]
+			sub	eax, 32				# eax := eax - 32
+			mov	ecx, eax				# ecx := eax
+			mov	eax, r14d				# eax := i		
+			cdqe
+			lea	rdx, data[rip]				# rdx := &data
+			mov	BYTE PTR [rax+rdx], cl			# data[i] := ecx
+			jmp	.L5					# Переходим в .L5 
+	
+		.L4:
+			add	r15d, 1				# ++j;
+	
+		.L3:
+			cmp	r15d, 5				# Сравниваем j с 5
+			jle	.L6					# Если i <= 5, то переходим в .L6 
+	
+		.L5:
+			add	r14d, 1				# ++i;
+	
+		.L2:
+			mov	eax, r14d				# eax := i
+			movsx	rbx, eax				# rbx := eax (с расширением разрядности)
+			lea	rdi, data[rip]				# rdi := &data - 1-й аргумент
+			call	strlen@PLT				# strlen(data)
+			cmp	rbx, rax				# Сравниваем i с strlen(data)
+			jb	.L7					# Если i < strlen(data), то переходим в .L7 
+			add	rsp, 24				# rsp := rsp + 24
+			pop	rbx
+			pop	rbp
+			ret						# Выход из функции
+
 ## 8) Тексты программы на языке ассемблера
 <b>main.s</b>:
 
@@ -310,7 +486,7 @@
   <p>./main.c ./modify.c \ </p>
   <p>-S </p>
 <p>Полученный ассеблер был вручную избавлен от лишних макросов.</p>
-После этого были проведены оптимизации кода на языке ассемблера: из кода modify.s были убраны команды nop, несколько строк типа <p>mov rax, QWORD PTR -32[rbp]</p> <p>mov rdi, rax</p> были заменены на mov rdi, QWORD PTR -32[rbp]
+После этого были проведены оптимизации кода на языке ассемблера: из кода modify.s были убраны команды nop, несколько строк типа <p>mov rax, QWORD PTR ...[rbp]</p> <p>mov rdi, rax</p> были заменены на mov rdi, QWORD PTR ...[rbp]
 <p>В программе используются локальные переменные, функции с передачей данных через параметры</p>
 <p>Был проведен рефакторинг кода на ассемблере за счет оптимизации регистров процессора: -52[rbp] заменен на r12d в main.s, -4[rbp] заменен на r13d в main.s, -20[rbp] заменен на r14d в modify.s, -24[rbp] заменен на r15d в modify.s</p>
 <p>В связи с этим удалось достичь уменьшения размеров исполняемых файлов (размеры файлов указаны в файлых <b>IHT2/IHT2/Screenshots/sizeAfterReact</b> и <b>IHT2/IHT2/Screenshots/sizeBeforeReact</b>)</p>
