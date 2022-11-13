@@ -4,10 +4,9 @@ char data[20000];
 
 extern void modify();
 
-FILE* input;
-FILE* output;
-
 int main(int argc, char** argv) {
+	FILE* input;
+	FILE* output;
 	char* instr;
 	char* outstr;
 
